@@ -23,7 +23,7 @@
 
 ### Linux / Kali
 ```bash
-git clone https://github.com/你的用户名/DirHunter.git
+git clone https://github.com/lyz618/DirHunter.git
 cd DirHunter
 python3 dirhunter.py
 ```
