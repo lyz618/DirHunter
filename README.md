@@ -1,8 +1,8 @@
 # DirHunter 🔍
 
-> 目录 / 敏感路径扫描工具 —— **纯 Python 标准库，零依赖**，拷到 U 盘任何装了 Python 3 的电脑双击即用。
+> 目录 / 敏感路径扫描工具
 
-适用于渗透测试资产梳理、CTF 目录爆破场景。不依赖 requests、不依赖 dirsearch，`python dirhunter.py` 直接跑，无需 `pip install` 任何东西。
+适用于渗透测试资产梳理、CTF 目录爆破场景。不依赖 requests、不依赖 dirsearch，`python dirhunter.py` 
 
 ## ✨ 特性
 
