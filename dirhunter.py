@@ -21,7 +21,7 @@ import time
 import urllib.request
 import urllib.error
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # ---------------- Windows 控制台 ANSI 颜色支持 ----------------
 try:
@@ -85,14 +85,33 @@ def load_wordlist(path):
 
 
 def build_candidates(words, exts):
-    """字典词 + 词.后缀 组合"""
-    cands = list(words)
+    """字典词 + 词.后缀 组合（自动去重）"""
+    cands, seen = [], set()
     for w in words:
+        if w not in seen:
+            seen.add(w)
+            cands.append(w)
         if w.endswith("/"):
             continue
         for e in exts:
-            cands.append("%s.%s" % (w, e))
+            c2 = "%s.%s" % (w, e)
+            if c2 not in seen:
+                seen.add(c2)
+                cands.append(c2)
     return cands
+
+
+def get_baseline(target, timeout):
+    """基线探测：请求 2 个随机不存在的路径，记录 404 页面指纹（用于软404识别）"""
+    import random
+    import string
+    results = []
+    base = target if target.endswith("/") else target + "/"
+    for _ in range(2):
+        rnd = "".join(random.choices(string.ascii_lowercase, k=16))
+        code, extra = probe(base + rnd, timeout)
+        results.append((code, extra if isinstance(extra, int) else 0))
+    return results
 
 
 def probe(url, timeout=8):
@@ -129,13 +148,23 @@ def status_color(code):
     return C.gray
 
 
-def scan(target, words, exts, threads, exclude, timeout, out_file):
+def scan(target, words, exts, threads, exclude, timeout, out_file, show_404=False):
     candidates = build_candidates(words, exts)
     if not target.endswith("/"):
         target += "/"
 
     print(C.bold("\n[*] 目标: %s" % target))
     print("[*] 字典: %d 词 x %d 后缀 = %d 条路径, 线程 %d" % (len(words), len(exts), len(candidates), threads))
+
+    # 软 404 基线：有些服务器对任意路径都返回 200 假页面
+    bl = get_baseline(target, timeout)
+    soft404 = None
+    if bl[0][0] is not None and bl[0] == bl[1]:
+        soft404 = bl[0]
+        print(C.yellow("[*] 基线: 随机路径返回 %s (%sB) → 检测到软404，相同指纹的响应将被过滤" % (soft404[0], soft404[1])))
+    else:
+        print("[*] 基线: 随机路径返回 %s → 正常服务器" % (bl[0][0] if bl[0][0] else "无响应",))
+
     print("[*] 开始扫描... (Ctrl+C 随时中断)\n" + "-" * 62)
 
     found = []
@@ -143,7 +172,6 @@ def scan(target, words, exts, threads, exclude, timeout, out_file):
     done = [0]
     total = len(candidates)
     t0 = time.time()
-    lock_print = []  # 进度行控制
 
     def worker(path):
         url = target + path
@@ -155,9 +183,14 @@ def scan(target, words, exts, threads, exclude, timeout, out_file):
         if code is None:
             errors[0] += 1
             return
+        length = extra if isinstance(extra, int) else 0
+        # 软 404 过滤：与基线同状态码同长度的响应视为不存在
+        if soft404 and code == soft404[0] and length == soft404[1]:
+            return
         if code in exclude:
             return
-        length = extra if isinstance(extra, int) else 0
+        if code == 404 and not show_404:
+            return
         print("\r" + status_color(code)("[%d]" % code) + "  %-8s %8d  /%s" % ("", length, path))
         found.append((code, "/" + path, length))
 
@@ -171,6 +204,11 @@ def scan(target, words, exts, threads, exclude, timeout, out_file):
     cost = time.time() - t0
     print("[*] 完成: %d 条, 耗时 %.1fs, 发现 %d 个有效路径, 网络错误 %d" % (total, cost, len(found), errors[0]))
     print(C.bold("    200=存在  301/302=跳转  403=禁止访问(更可疑)  500=可尝试注入\n"))
+    if not found:
+        print(C.yellow("    [提示] 0 命中通常是字典没覆盖该站的自定义路径，可以："))
+        print(C.yellow("    1) 加 --show-404 或交互中开启显示404，对比 dirsearch 的输出"))
+        print(C.yellow("    2) 换更大的字典 (-w 自定义字典)"))
+        print(C.yellow("    3) 先用浏览器随便点几个真实路径，把路径名加进字典再扫\n"))
 
     if found and out_file:
         os.makedirs(os.path.dirname(out_file), exist_ok=True)
@@ -216,6 +254,10 @@ def interactive():
             if s.isdigit():
                 exclude.add(int(s))
 
+        show404 = ask("是否显示 404 响应 (和 dirsearch 对比时开)", "N").lower() == "y"
+        if show404:
+            exclude.discard(404)
+
         print("\n  目标 : %s\n  后缀 : %s\n  线程 : %d\n  字典 : %s (%d 词)" % (target, ",".join(exts), threads, wl, len(words)))
         c = ask("确认开始扫描？(Y=开始 N=重填 Q=退出)", "Y").lower()
         if c == "q":
@@ -227,7 +269,7 @@ def interactive():
         host = target.split("://", 1)[1].replace(":", "_").replace("/", "_")
         out_file = os.path.join(RESULTS_DIR, "%s_%s.txt" % (host, stamp))
         try:
-            scan(target, words, exts, threads, exclude, 8, out_file)
+            scan(target, words, exts, threads, exclude, 8, out_file, show_404=show404)
         except KeyboardInterrupt:
             print(C.red("\n[!] 已中断"))
         if ask("\n再扫一个目标？(Y=继续)", "N").lower() != "y":
@@ -247,6 +289,7 @@ def main():
     p.add_argument("--timeout", type=int, default=8, help="单请求超时秒数 (默认 8)")
     p.add_argument("-x", "--exclude", default="404", help="排除的状态码，逗号分隔 (默认 404)")
     p.add_argument("-o", "--output", help="报告输出文件 (默认自动存 results/)")
+    p.add_argument("-s", "--show-404", action="store_true", help="显示 404 响应（默认隐藏）")
     p.add_argument("-v", "--version", action="version", version="DirHunter " + __version__)
     args = p.parse_args()
 
@@ -268,7 +311,7 @@ def main():
         host = target.split("://", 1)[1].replace(":", "_").replace("/", "_")
         out_file = os.path.join(RESULTS_DIR, "%s_%s.txt" % (host, stamp))
 
-    scan(target, words, exts, args.threads, exclude, args.timeout, out_file)
+    scan(target, words, exts, args.threads, exclude, args.timeout, out_file, show_404=args.show_404)
 
 
 if __name__ == "__main__":

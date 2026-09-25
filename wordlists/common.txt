@@ -1,6 +1,17 @@
 # DirHunter 内置字典 common.txt
-# 常见后台 / 敏感文件 / 备份 / 配置路径（约 300 词）
+# 常见后台 / 敏感文件 / 备份 / 配置路径（约 350 词）
 # 用法: 每行一个路径，# 开头为注释；工具会自动再组合 .php/.html 等后缀
+
+# ---- 首页 / 入口文件 ----
+index.html
+index.htm
+index.php
+home.html
+main.html
+default.html
+admin.html
+login.html
+manager.html
 
 # ---- 管理后台 ----
 admin
@@ -328,3 +339,48 @@ debug.log
 syslog
 audit
 audit.log
+
+# ---- CTF / 比赛常用 ----
+flag
+flag.txt
+flag.html
+flag.php
+flags
+flag1
+flag1.txt
+flag2
+flag2.txt
+flag3.txt
+secret
+secret.txt
+key.txt
+password.txt
+pass.txt
+admin.php
+register.php
+shell.php
+cmd.php
+eval.php
+backdoor.php
+webshell.php
+test.txt
+note.txt
+todo.txt
+readme.html
+backup.html
+old.html
+upload.html
+upload.htm
+filemanage
+filemanager
+dirlist
+dir.php
+cat.php
+page.php
+page
+include.php
+exec.php
+ping.php
+exec
+execute
+command
